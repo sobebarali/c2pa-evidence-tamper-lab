@@ -33,6 +33,7 @@ function RecordsPage() {
                 <th className="p-2">Mode</th>
                 <th className="p-2">Signature</th>
                 <th className="p-2">Manifest</th>
+                <th className="p-2">Original hash</th>
                 <th className="p-2">Signed hash</th>
                 <th className="p-2" />
               </tr>
@@ -56,6 +57,9 @@ function RecordsPage() {
                   </td>
                   <td className="max-w-40 truncate p-2 font-mono text-xs">
                     {r.manifestLabel ?? "—"}
+                  </td>
+                  <td className="p-2 font-mono text-xs">
+                    {r.originalFileHash.slice(0, 12)}…
                   </td>
                   <td className="p-2 font-mono text-xs">
                     {r.signedFileHash.slice(0, 12)}…

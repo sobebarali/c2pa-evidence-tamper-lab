@@ -68,7 +68,7 @@ function UploadPage() {
           ? {
               lat: Number(form.lat),
               lng: Number(form.lng),
-              source: "user" as const,
+              source: (form.gpsSource as "exif" | "user" | "unknown") ?? "user",
               confidence: "medium" as const,
             }
           : null,
@@ -206,6 +206,19 @@ function UploadPage() {
             <Field id="lat" label="GPS lat" onChange={set("lat")} />
             <Field id="lng" label="GPS lng" onChange={set("lng")} />
             <Field id="heading" label="Heading (°)" onChange={set("heading")} />
+            <div className="space-y-1">
+              <Label htmlFor="gpsSource">Location source</Label>
+              <select
+                className="w-full rounded-md border bg-background p-2 text-sm"
+                id="gpsSource"
+                onChange={set("gpsSource")}
+                value={form.gpsSource ?? "user"}
+              >
+                <option value="user">user</option>
+                <option value="exif">exif</option>
+                <option value="unknown">unknown</option>
+              </select>
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -315,6 +328,14 @@ function UploadPage() {
               />
             </dl>
           </div>
+          <a
+            className="mt-3 inline-block text-sm underline"
+            download={`signed-${signed.evidenceId}.jpg`}
+            href={fileUrl(signed.signedFileId)}
+          >
+            Download signed image — re-upload this one on the Verify page to get
+            “verified”
+          </a>
           <div className="mt-4 flex gap-2">
             <Link
               className={buttonVariants({ size: "sm" })}

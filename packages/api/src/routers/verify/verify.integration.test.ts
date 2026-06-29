@@ -85,6 +85,7 @@ function flipTitleByte(needle: string) {
     if (i < 0) {
       throw new Error("title needle not found in signed bytes");
     }
+    // biome-ignore lint/suspicious/noBitwiseOperators: deliberate bit-flip to corrupt a signed byte
     b[i + 3] = (b[i + 3] ?? 0) ^ 0x01;
     return b;
   };
@@ -98,6 +99,7 @@ function smashClaimCbor(b: Buffer): Buffer {
     throw new Error("c2pa.claim label not found in signed bytes");
   }
   for (let i = ci + 40; i < ci + 72; i++) {
+    // biome-ignore lint/suspicious/noBitwiseOperators: deliberate bit-flip to smash claim CBOR
     b[i] = (b[i] ?? 0) ^ 0xff;
   }
   return b;
