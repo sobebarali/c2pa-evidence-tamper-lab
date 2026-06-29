@@ -34,6 +34,9 @@ Node built-in `node:crypto` for SHA-256 (no dependency).
   manifest but is re-linked by perceptual fingerprint (see below).
 - **File facts** — SHA-256, dimensions, mime, and EXIF/GPS are really computed;
   missing EXIF/GPS is represented as `null`, never faked.
+- **Formats** — `image/jpeg` and `image/png` are accepted (schema `mediaSchema`).
+  Sign, extract, verify, and `strip` tamper work for both; **`pixel` tamper is
+  JPEG-only** (it patches the JPEG entropy-coded scan).
 - **Database** — the evidence record is really persisted (SQLite/libSQL) and the
   `evidenceId` lookup is a real query.
 - **Tests** — the integration tests sign/verify/tamper for real against an
@@ -116,7 +119,8 @@ public upstream test fixture, loudly labeled dev-only.
 - **Untrusted dev certificates** — no real trust chain or timestamp authority, so
   results are "valid but untrusted."
 - **Pixel-tamper heuristic** — patches a fixed offset into the JPEG scan; robust
-  for the lab but not content-aware (and JPEG-only).
+  for the lab but not content-aware. JPEG-only: a `pixel` tamper on a PNG throws
+  (sign/verify/`strip` still work for PNG).
 - **In-memory uploads** — files are buffered in memory bounded by
   `MAX_UPLOAD_BYTES`; no streaming or virus scanning.
 - **evidenceId sequence** — derived from the record count; fine locally, not
@@ -130,5 +134,5 @@ public upstream test fixture, loudly labeled dev-only.
   and verification against the C2PA trust list (`verify_trust:true`).
 - Object storage (S3/R2) for image bytes; stream uploads; add content scanning.
 - Auth + per-user scoping; rate limiting on sign/verify.
-- Content-aware tampering/diffing and PNG/other-format support.
+- Content-aware tampering/diffing; PNG-aware pixel tamper and other-format support.
 - Move signing behind a KMS/HSM so key material never touches application memory.
