@@ -44,12 +44,12 @@ The **verify** flow always *returns* a result object. A tampered or unsigned ima
 | `uploadedFileStatus` | Meaning |
 |------|---------|
 | `verified` | Manifest present, C2PA validation clean (trust unverified in dev → `C2PA_TRUST_UNVERIFIED`). |
-| `tampered` | Manifest present, validation failed (a `.mismatch` in `validation_status`); `evidenceId` may still be recoverable. |
-| `manifest_missing` | No C2PA manifest (unsigned, or metadata stripped). |
+| `tampered` | Manifest present, v2 `validation_state: "Invalid"` (e.g. a hash `.mismatch`); `evidenceId` may still be recoverable. |
+| `manifest_missing` | No C2PA manifest (unsigned, or metadata stripped) — may still be re-linked by perceptual fingerprint (`MATCHED_BY_SOFT_BINDING`). |
 | `manifest_invalid` | Manifest present but unparseable / signature broken. |
 | `unknown` | Verifier could not confidently classify. |
 
-Reason codes (response data, from `task.md` §6): `C2PA_MANIFEST_MISSING`, `C2PA_MANIFEST_PARSE_FAILED`, `C2PA_SIGNATURE_INVALID`, `C2PA_TRUST_UNVERIFIED`, `HASH_ASSERTION_MISMATCH`, `EVIDENCE_JSON_SCHEMA_INVALID`, `EVIDENCE_ID_NOT_FOUND_IN_DB`, `MATCHED_PRIOR_EVIDENCE_RECORD`.
+Reason codes (response data, from `task.md` §6): `C2PA_MANIFEST_MISSING`, `C2PA_MANIFEST_PARSE_FAILED`, `C2PA_SIGNATURE_INVALID`, `C2PA_TRUST_UNVERIFIED`, `HASH_ASSERTION_MISMATCH`, `EVIDENCE_JSON_SCHEMA_INVALID`, `EVIDENCE_ID_NOT_FOUND_IN_DB`, `MATCHED_PRIOR_EVIDENCE_RECORD`. 2026-alignment additions (CET-252): `MATCHED_BY_SOFT_BINDING`, `CAWG_IDENTITY_PRESENT`, `CAWG_IDENTITY_INVALID` (plus the in-body `C2PA_VALIDATION_FAILED` / `C2PA_VERIFIER_ERROR`).
 
 ## Shared building blocks (copy these, don't re-derive)
 

@@ -12,7 +12,7 @@
 - **Input:** `{ originalFileId, claims }` (`claims` = `evidenceClaimsSchema`).
 - **Output:** `{ evidenceId, signedFileId, signedFileHash, manifestLabel, signatureStatus }`.
 - **Errors:** `NOT_FOUND` (original missing) · `TOOL_ERROR` (signing failed).
-- **Side effects:** mints `evidenceId`; builds the canonical evidence JSON (media rebuilt server-side); signs via c2pa (custom assertion); stores the signed `files` row + the `evidence_records` row.
+- **Side effects:** mints `evidenceId`; builds the canonical evidence JSON (media rebuilt server-side); signs via c2pa (evidence + modeled CAWG identity assertions); stores the signed `files` row + the `evidence_records` row (incl. perceptual `fingerprint` + `repositoryReceipt`).
 
 ## `tamper.create` — step 5
 - **Input:** `{ signedFileId, method: "strip" | "pixel" }`.
@@ -22,13 +22,14 @@
 
 ## `verify.check` — step 6
 - **Input:** `{ file: File }`.
-- **Output:** the task.md §7 result — `{ uploadedFileId, uploadedFileStatus, matchedEvidenceId, matchedOriginalRecord, reasonCodes[], uploadedFileHash, originalSignedFileHash, message }`.
+- **Output:** the task.md §7 result — `{ uploadedFileId, uploadedFileStatus, matchedEvidenceId, matchedOriginalRecord, reasonCodes[], uploadedFileHash, originalSignedFileHash, message }` plus `report` (v2 `{ validationState, validationResults }`, nullable) and `identity` (`{ present, signerName }`).
 - **Errors:** none — a tampered/unsigned image is a **successful** result (status in the body); an unexpected verifier failure returns status `unknown` (+`C2PA_VERIFIER_ERROR`), never a thrown error.
-- **Side effects:** stores the uploaded `files` row; reads `evidence_records` by recovered `evidenceId`.
+- **Side effects:** stores the uploaded `files` row; reads `evidence_records` by recovered `evidenceId` — first from the manifest, then (when missing) by perceptual-fingerprint soft binding (`MATCHED_BY_SOFT_BINDING`).
+- **Extra reason codes (beyond task.md §6):** `MATCHED_BY_SOFT_BINDING`, `CAWG_IDENTITY_PRESENT`, `CAWG_IDENTITY_INVALID`.
 
 ## `records.list` / `records.get`
 - **Input:** list — none; get — `{ evidenceId }`.
-- **Output:** the §5 record view(s) (hashes, manifest label, signature status, validation errors, extracted evidence json, createdAt ISO).
+- **Output:** the §5 record view(s) (hashes, manifest label, signature status, validation errors, extracted evidence json, createdAt ISO) plus `repositoryReceipt` (modeled `c2pa.repository-receipt`, nullable).
 - **Errors:** get — `NOT_FOUND`.
 - **Side effects:** none.
 

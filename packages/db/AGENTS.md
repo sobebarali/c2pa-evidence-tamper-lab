@@ -14,7 +14,7 @@
 | Table | Role |
 |-------|------|
 | `files` | addressable index of stored image bytes (disk under `DATA_DIR`, served via `GET /files/:id`). `kind` ∈ original/signed/tampered/uploaded; captures sha256/mime/size/dims. |
-| `evidence_records` | one row per signed evidence (task.md §5): `evidenceId` (pk), mode, original/signed file ids + hashes, manifest label, claim generator, signature status, `validationErrors` (json), `extractedEvidenceJson` (json). FKs → `files.id`. |
+| `evidence_records` | one row per signed evidence (task.md §5): `evidenceId` (pk), mode, original/signed file ids + hashes, manifest label, claim generator, signature status, `validationErrors` (json), `extractedEvidenceJson` (json), `fingerprint` (perceptual soft-binding hash, nullable), `repositoryReceipt` (modeled `c2pa.repository-receipt` json, nullable). FKs → `files.id`. |
 
 ## Conventions (Rule → Why)
 

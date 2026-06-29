@@ -7,15 +7,16 @@
 ### `storage` — disk file store
 `createStorage(baseDir)` → `{ storeFile, getFileRow, readBytes }`. Bytes live under `DATA_DIR` keyed by uuid; the `files` table is the index (served via `GET /files/:id`). `db` is passed per-call. Singleton `storage` uses `env.DATA_DIR`; tests pass a temp dir.
 
-### `imaging` — sharp + exifr + crypto
+### `imaging` — sharp + exifr + sharp-phash + crypto
 - `sha256(bytes)` — node:crypto, no dep.
+- `perceptualHash(bytes)` → 64-bit DCT pHash (`sharp-phash`); `hammingDistance(a,b)` — soft-binding fingerprint for recovering a stripped/re-encoded image.
 - `extractMetadata(bytes)` → `{ mime, width, height, sizeBytes, capturedAt, gps }`; missing EXIF/GPS → `null` (honest, not invalid).
 - `tamper(bytes, "strip"|"pixel")` — `strip` re-encodes via sharp (drops the manifest → `manifest_missing`); `pixel` byte-patches the JPEG scan, preserving the C2PA segment (→ `tampered`, evidenceId recoverable). The pixel offset is a heuristic (ponytail-marked).
 
 ### `c2pa` — @contentauth/c2pa-node wrapper
-- `signImage({ bytes, mime, title, evidence })` → `{ signedBytes, manifestLabel, claimGenerator, signatureStatus }`. Embeds the evidence JSON as the custom assertion `com.originalpictures.evidence`; signs with the dev demo certs (`LocalSigner`, es256).
-- `readManifest(bytes, mime)` → `{ hasManifest, manifestLabel, claimGenerator, evidence, validationStatus, parseFailed, hasC2paBytes }`. `verify_trust:false` (dev certs untrusted).
-- `classify(read)` → `{ status, reasonCodes }` mapping to the verify taxonomy: clean → `verified` (+`C2PA_TRUST_UNVERIFIED`); any `validation_status` failure → `tampered` (+`HASH_ASSERTION_MISMATCH`/`C2PA_SIGNATURE_INVALID`); no manifest + no c2pa bytes → `manifest_missing`; parse fail + c2pa bytes → `manifest_invalid`.
+- `signImage({ bytes, mime, title, evidence })` → `{ signedBytes, manifestLabel, claimGenerator, signatureStatus }`. Embeds the evidence JSON (`com.originalpictures.evidence`) + a modeled CAWG identity assertion (`com.originalpictures.identity`); signs with the dev demo certs (`LocalSigner`, es256).
+- `readManifest(bytes, mime)` → `{ hasManifest, manifestLabel, claimGenerator, evidence, hasIdentity, identitySignerName, validationStatus, validationResults, validationState, parseFailed, hasC2paBytes }`. Reader settings are env-driven (`C2PA_VERIFY_TRUST`, default false → dev certs untrusted).
+- `classify(read)` → `{ status, reasonCodes }`: prefers the **v2** surface (`validationState` + `validationResults.activeManifest.failure[]`), falling back to legacy `validationStatus`. `Valid`/`Trusted` → `verified` (+`C2PA_TRUST_UNVERIFIED` unless Trusted); `Invalid` → `tampered` (+`HASH_ASSERTION_MISMATCH`/`C2PA_SIGNATURE_INVALID`); no manifest + no c2pa bytes → `manifest_missing`; parse fail + c2pa bytes → `manifest_invalid`.
 
 ## Conventions (Rule → Why)
 
