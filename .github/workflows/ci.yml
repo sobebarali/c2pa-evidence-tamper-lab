@@ -11,7 +11,10 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # macOS arm64: @contentauth/c2pa-node@0.6.0 ships only a macOS arm64
+    # prebuilt and has no working Linux binary (no release asset, broken
+    # source build), so the real C2PA suite only runs here.
+    runs-on: macos-latest
     env:
       # Dummy values so @t3-oss/env validation passes at boot; tests use an
       # in-memory libSQL DB and the committed demo certs in fixtures/dev-certs.

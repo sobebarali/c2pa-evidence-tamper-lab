@@ -60,8 +60,5 @@
     "typescript": "catalog:",
     "ultracite": "7.8.3"
   },
-  "packageManager": "bun@1.3.5",
-  "trustedDependencies": [
-    "@contentauth/c2pa-node"
-  ]
+  "packageManager": "bun@1.3.5"
 }
