@@ -21,6 +21,7 @@ function toView(row: EvidenceRecordRow): RecordView {
     signatureStatus: row.signatureStatus,
     validationErrors: row.validationErrors,
     extractedEvidenceJson: row.extractedEvidenceJson,
+    repositoryReceipt: row.repositoryReceipt ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }

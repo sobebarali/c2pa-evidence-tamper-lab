@@ -1,11 +1,19 @@
+import type { Db } from "@c2pa-evidence-tamper-lab/db";
 import { evidenceRecords } from "@c2pa-evidence-tamper-lab/db";
+import { env } from "@c2pa-evidence-tamper-lab/env/server";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { evidenceIdSchema, evidenceSchema } from "../../evidence/schema";
 import { publicProcedure } from "../../index";
+import type { ReadResult } from "../../integrations/c2pa";
 import { classify, readManifest } from "../../integrations/c2pa";
-import { extractMetadata, sha256 } from "../../integrations/imaging";
+import {
+  extractMetadata,
+  hammingDistance,
+  perceptualHash,
+  sha256,
+} from "../../integrations/imaging";
 import { storage } from "../../integrations/storage";
 import type { VerifyOutput } from "./schema";
 import { verifyInput, verifyOutput } from "./schema";
@@ -31,6 +39,48 @@ function messageFor(
     return "A C2PA manifest is present but could not be validated or parsed.";
   }
   return "The file could not be confidently classified.";
+}
+
+// Finds the nearest stored record by perceptual fingerprint within the configured
+// Hamming threshold. Returns null when nothing is close enough — a stricter bar
+// than "least distant" so unrelated images don't get falsely linked.
+async function matchBySoftBinding(
+  db: Db,
+  bytes: Buffer
+): Promise<{ evidenceId: string; signedFileHash: string } | null> {
+  const uploadedFingerprint = await perceptualHash(bytes);
+  const records = await db.select().from(evidenceRecords);
+  let best: { evidenceId: string; signedFileHash: string } | null = null;
+  let bestDistance = env.FINGERPRINT_MAX_DISTANCE + 1;
+  for (const record of records) {
+    if (!record.fingerprint) {
+      continue;
+    }
+    const distance = hammingDistance(uploadedFingerprint, record.fingerprint);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = {
+        evidenceId: record.evidenceId,
+        signedFileHash: record.signedFileHash,
+      };
+    }
+  }
+  return bestDistance <= env.FINGERPRINT_MAX_DISTANCE ? best : null;
+}
+
+// Reason code for the CAWG identity binding, or null when no identity assertion
+// is present.
+function identityReasonCode(read: ReadResult): string | null {
+  if (!read.hasIdentity) {
+    return null;
+  }
+  const failed = (read.validationResults?.activeManifest?.failure ?? []).some(
+    (s) => {
+      const code = s.code.toLowerCase();
+      return code.includes("cawg") || code.includes("identity");
+    }
+  );
+  return failed ? "CAWG_IDENTITY_INVALID" : "CAWG_IDENTITY_PRESENT";
 }
 
 // Step 6 — read + verify an uploaded image, classify it, recover the evidenceId,
@@ -60,6 +110,11 @@ const check = publicProcedure
       const classification = classify(read);
       const reasonCodes = [...classification.reasonCodes];
 
+      const identityReason = identityReasonCode(read);
+      if (identityReason) {
+        reasonCodes.push(identityReason);
+      }
+
       let matchedEvidenceId: string | null = null;
       let matchedOriginalRecord = false;
       let originalSignedFileHash: string | null = null;
@@ -88,6 +143,22 @@ const check = publicProcedure
         }
       }
 
+      // Soft-binding fallback: the manifest gave us no usable evidenceId (e.g.
+      // it was stripped). Recover the link via perceptual fingerprint. The DB is
+      // not cryptographic truth — this match is advisory, so the status stays
+      // whatever the C2PA verifier decided (typically manifest_missing).
+      let matchedBySoftBinding = false;
+      if (!matchedEvidenceId) {
+        const match = await matchBySoftBinding(context.db, bytes);
+        if (match) {
+          matchedEvidenceId = match.evidenceId;
+          matchedOriginalRecord = true;
+          originalSignedFileHash = match.signedFileHash;
+          matchedBySoftBinding = true;
+          reasonCodes.push("MATCHED_BY_SOFT_BINDING");
+        }
+      }
+
       return {
         uploadedFileId: uploaded.id,
         uploadedFileStatus: classification.status,
@@ -96,7 +167,17 @@ const check = publicProcedure
         reasonCodes,
         uploadedFileHash,
         originalSignedFileHash,
-        message: messageFor(classification.status, matchedOriginalRecord),
+        message: matchedBySoftBinding
+          ? "No valid C2PA manifest links this file, but it perceptually matches a signed Original Pictures evidence record (soft binding — not a cryptographic guarantee)."
+          : messageFor(classification.status, matchedOriginalRecord),
+        report: {
+          validationState: read.validationState,
+          validationResults: read.validationResults,
+        },
+        identity: {
+          present: read.hasIdentity,
+          signerName: read.identitySignerName,
+        },
       };
     } catch {
       // The C2PA verifier failed unexpectedly (task.md §6) — return `unknown`
@@ -110,6 +191,8 @@ const check = publicProcedure
         uploadedFileHash,
         originalSignedFileHash: null,
         message: messageFor("unknown", false),
+        report: null,
+        identity: { present: false, signerName: null },
       };
     }
   });

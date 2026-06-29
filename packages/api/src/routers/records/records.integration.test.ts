@@ -6,6 +6,8 @@ import { testContext } from "../../test-support/context";
 import { makeJpeg, sampleClaims, toFile } from "../../test-support/fixtures";
 import { appRouter } from "../index";
 
+const SHA256_HEX = /^[a-f0-9]{64}$/;
+
 let context: ReturnType<typeof testContext>;
 let close: () => void;
 let evidenceId: string;
@@ -43,6 +45,13 @@ it("fetches one record by evidenceId", async () => {
   const res = await call(appRouter.records.get, { evidenceId }, { context });
   expect(res.evidenceId).toBe(evidenceId);
   expect(res.mode).toBe("journalism");
+});
+
+// CET-256 — the repository-receipt is persisted on sign and returned.
+it("returns the repository receipt for a record", async () => {
+  const res = await call(appRouter.records.get, { evidenceId }, { context });
+  expect(res.repositoryReceipt?.repository).toBe("local-libsql");
+  expect(res.repositoryReceipt?.signedFileHash).toMatch(SHA256_HEX);
 });
 
 it("returns NOT_FOUND for an unknown evidenceId", async () => {

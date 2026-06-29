@@ -19,6 +19,23 @@ export const env = createEnv({
     // never stored, returned, or exported.
     C2PA_SIGN_CERT_PATH: z.string().optional(),
     C2PA_PRIVATE_KEY_PATH: z.string().optional(),
+    // Max Hamming distance (out of 64) for a perceptual-fingerprint soft-binding
+    // match when the C2PA manifest is missing. Lower = stricter.
+    FINGERPRINT_MAX_DISTANCE: z.coerce
+      .number()
+      .int()
+      .min(0)
+      .max(64)
+      .default(10),
+    // Verify signer certs against a trust list. Default false: the demo certs are
+    // intentionally untrusted in dev (untrusted ≠ tampered).
+    C2PA_VERIFY_TRUST: z.coerce.boolean().default(false),
+    // Optional PEM bundle of trust anchors used when C2PA_VERIFY_TRUST is on.
+    C2PA_TRUST_ANCHORS_PATH: z.string().optional(),
+    // Optional CAWG identity-assertion signer certs. When unset, the dev-only
+    // demo signing certs are reused (untrusted).
+    C2PA_CAWG_CERT_PATH: z.string().optional(),
+    C2PA_CAWG_KEY_PATH: z.string().optional(),
   },
   runtimeEnv: process.env,
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

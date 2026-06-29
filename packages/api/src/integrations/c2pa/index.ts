@@ -2,13 +2,30 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { env } from "@c2pa-evidence-tamper-lab/env/server";
-import { Builder, LocalSigner, Reader } from "@contentauth/c2pa-node";
-import type { ManifestStore, ValidationStatus } from "@contentauth/c2pa-types";
+import {
+  Builder,
+  createTrustSettings,
+  createVerifySettings,
+  LocalSigner,
+  mergeSettings,
+  Reader,
+} from "@contentauth/c2pa-node";
+import type {
+  ManifestStore,
+  ValidationResults,
+  ValidationState,
+  ValidationStatus,
+} from "@contentauth/c2pa-types";
 
 import type { Evidence } from "../../evidence/schema";
 
 // Custom assertion label embedding the evidence JSON (reverse-DNS).
 export const EVIDENCE_ASSERTION_LABEL = "com.originalpictures.evidence";
+// Identity-binding assertion. This is a CAWG-shaped identity binding carried as a
+// claim-signed assertion (covered by the manifest signature), NOT a separately
+// COSE-signed CAWG credential — c2pa-node 0.6.0's IdentityAssertionSigner
+// corrupts the claim signature with a local ES256 callback. See DECISIONS.md.
+export const IDENTITY_ASSERTION_LABEL = "com.originalpictures.identity";
 const CLAIM_GENERATOR_NAME = "Original Pictures Evidence Agent";
 const CLAIM_GENERATOR_VERSION = "1.0";
 
@@ -33,6 +50,8 @@ const keyPath =
   env.C2PA_PRIVATE_KEY_PATH ??
   join(repoRoot, "fixtures/dev-certs/es256_private.key");
 
+// Memoized claim signer over the demo cert/key. The key is loaded once and never
+// leaves this module — never stored, returned, or exported (task.md §9).
 let signerPromise: ReturnType<typeof LocalSigner.newSigner> | null = null;
 
 async function getSigner() {
@@ -44,6 +63,29 @@ async function getSigner() {
     signerPromise = LocalSigner.newSigner(cert, key, "es256");
   }
   return signerPromise;
+}
+
+// Builds the identity-binding assertion from the evidence claims: who produced
+// the asset, bound (by reference) to the evidence assertion and covered by the
+// manifest signature.
+function buildIdentityAssertion(evidence: Evidence) {
+  const actor =
+    evidence.mode === "journalism"
+      ? {
+          role: "reporter",
+          id: evidence.journalism.reporterId,
+          organization: evidence.journalism.organization,
+        }
+      : {
+          role: "inspector",
+          id: evidence.inspection.inspectorId,
+          organization: null,
+        };
+  return {
+    profile: "cawg.identity (modeled — claim-signed)",
+    referencedAssertions: [EVIDENCE_ASSERTION_LABEL],
+    namedActor: actor,
+  };
 }
 
 export interface SignResult {
@@ -71,6 +113,10 @@ export async function signImage(input: {
         data: { actions: [{ action: "c2pa.created" }] },
       },
       { label: EVIDENCE_ASSERTION_LABEL, data: input.evidence },
+      {
+        label: IDENTITY_ASSERTION_LABEL,
+        data: buildIdentityAssertion(input.evidence),
+      },
     ],
   });
 
@@ -89,17 +135,51 @@ export async function signImage(input: {
     signedBytes,
     manifestLabel: read.manifestLabel,
     claimGenerator: read.claimGenerator,
-    signatureStatus: read.validationStatus.length === 0 ? "valid" : "invalid",
+    signatureStatus: isInvalidRead(read) ? "invalid" : "valid",
   };
+}
+
+// Memoized reader settings. Trust verification is env-driven; the lab default is
+// OFF — the demo certs chain to no anchor, so untrusted ≠ tampered. Flip
+// C2PA_VERIFY_TRUST (+ optional C2PA_TRUST_ANCHORS_PATH) to verify a real chain.
+let readerSettingsPromise: ReturnType<typeof buildReaderSettings> | null = null;
+
+async function buildReaderSettings() {
+  const trustAnchors = env.C2PA_TRUST_ANCHORS_PATH
+    ? await readFile(env.C2PA_TRUST_ANCHORS_PATH, "utf8")
+    : undefined;
+  return mergeSettings(
+    createVerifySettings({
+      verifyAfterReading: true,
+      verifyTrust: env.C2PA_VERIFY_TRUST,
+    }),
+    createTrustSettings({
+      verifyTrustList: env.C2PA_VERIFY_TRUST,
+      trustAnchors,
+    })
+  );
+}
+
+function getReaderSettings() {
+  if (!readerSettingsPromise) {
+    readerSettingsPromise = buildReaderSettings();
+  }
+  return readerSettingsPromise;
 }
 
 export interface ReadResult {
   claimGenerator: string | null;
   evidence: unknown;
   hasC2paBytes: boolean;
+  hasIdentity: boolean;
   hasManifest: boolean;
+  identitySignerName: string | null;
   manifestLabel: string | null;
   parseFailed: boolean;
+  // C2PA v2 surface — preferred by classify(); null on v1 assets.
+  validationResults: ValidationResults | null;
+  validationState: ValidationState | null;
+  // Legacy v1 surface (may be empty on v2 assets).
   validationStatus: ValidationStatus[];
 }
 
@@ -112,7 +192,7 @@ export async function readManifest(
   try {
     reader = await Reader.fromAsset(
       { buffer: bytes, mimeType: mime },
-      { verify: { verify_after_reading: true, verify_trust: false } }
+      await getReaderSettings()
     );
   } catch {
     return emptyRead({ parseFailed: true, hasC2paBytes });
@@ -131,6 +211,14 @@ export async function readManifest(
   const evidenceAssertion = active.assertions?.find(
     (a) => a.label === EVIDENCE_ASSERTION_LABEL
   );
+  const identityAssertion = active.assertions?.find(
+    (a) => a.label === IDENTITY_ASSERTION_LABEL
+  );
+  const identityActor = (
+    identityAssertion?.data as
+      | { namedActor?: { id?: string; organization?: string | null } }
+      | undefined
+  )?.namedActor;
   const claimGenerator =
     active.claim_generator_info?.[0]?.name ?? active.claim_generator ?? null;
 
@@ -139,7 +227,12 @@ export async function readManifest(
     manifestLabel: activeLabel,
     claimGenerator,
     evidence: evidenceAssertion?.data ?? null,
+    hasIdentity: identityAssertion !== undefined,
+    identitySignerName:
+      identityActor?.organization ?? identityActor?.id ?? null,
     validationStatus: store.validation_status ?? [],
+    validationResults: store.validation_results ?? null,
+    validationState: store.validation_state ?? null,
     parseFailed: false,
     hasC2paBytes,
   };
@@ -148,6 +241,26 @@ export async function readManifest(
 export interface Classification {
   reasonCodes: string[];
   status: VerifyStatus;
+}
+
+// Failure status codes, preferring the C2PA v2 surface (validation_results) and
+// falling back to legacy validation_status for v1 assets.
+function collectFailureCodes(read: ReadResult): string[] {
+  const fromResults =
+    read.validationResults?.activeManifest?.failure?.map((s) => s.code) ?? [];
+  const fromLegacy = read.validationStatus
+    .filter((s) => s.success !== true)
+    .map((s) => s.code);
+  return [...fromResults, ...fromLegacy];
+}
+
+// A manifest is invalid when v2 validation_state says so, or (on v1 assets with
+// no state) when any failure code is present.
+function isInvalidRead(read: ReadResult): boolean {
+  if (read.validationState) {
+    return read.validationState === "Invalid";
+  }
+  return collectFailureCodes(read).length > 0;
 }
 
 // Maps a read result to the verification status + reason codes (task.md §6).
@@ -166,16 +279,20 @@ export function classify(read: ReadResult): Classification {
     };
   }
 
-  if (read.validationStatus.length === 0) {
+  if (!isInvalidRead(read)) {
+    // "Trusted" means the cert chained to a configured anchor; otherwise the
     // demo certs are intentionally untrusted in dev — surfaced honestly.
-    return { status: "verified", reasonCodes: ["C2PA_TRUST_UNVERIFIED"] };
+    return read.validationState === "Trusted"
+      ? { status: "verified", reasonCodes: [] }
+      : { status: "verified", reasonCodes: ["C2PA_TRUST_UNVERIFIED"] };
   }
 
+  const failureCodes = collectFailureCodes(read);
   const reasonCodes = ["C2PA_VALIDATION_FAILED"];
-  if (read.validationStatus.some((s) => s.code.includes("mismatch"))) {
+  if (failureCodes.some((c) => c.includes("mismatch"))) {
     reasonCodes.push("HASH_ASSERTION_MISMATCH");
   }
-  if (read.validationStatus.some((s) => SIGNATURE_FAILURE_CODE.test(s.code))) {
+  if (failureCodes.some((c) => SIGNATURE_FAILURE_CODE.test(c))) {
     reasonCodes.push("C2PA_SIGNATURE_INVALID");
   }
   return { status: "tampered", reasonCodes };
@@ -190,7 +307,11 @@ function emptyRead(opts: {
     manifestLabel: null,
     claimGenerator: null,
     evidence: null,
+    hasIdentity: false,
+    identitySignerName: null,
     validationStatus: [],
+    validationResults: null,
+    validationState: null,
     parseFailed: opts.parseFailed,
     hasC2paBytes: opts.hasC2paBytes,
   };

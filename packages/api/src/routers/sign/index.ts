@@ -4,7 +4,7 @@ import { buildEvidence, formatEvidenceId } from "../../evidence/build";
 import { evidenceSchema, type Media } from "../../evidence/schema";
 import { publicProcedure } from "../../index";
 import { signImage } from "../../integrations/c2pa";
-import { sha256 } from "../../integrations/imaging";
+import { perceptualHash, sha256 } from "../../integrations/imaging";
 import { storage } from "../../integrations/storage";
 import { routerError } from "../_shared/errors";
 import { signInput, signOutput } from "./schema";
@@ -59,6 +59,7 @@ const create = publicProcedure
     }
 
     const signedHash = sha256(signed.signedBytes);
+    const fingerprint = await perceptualHash(signed.signedBytes);
     const signedRow = await storage.storeFile(context.db, {
       bytes: signed.signedBytes,
       kind: "signed",
@@ -79,8 +80,15 @@ const create = publicProcedure
       manifestLabel: signed.manifestLabel,
       claimGenerator: signed.claimGenerator,
       signatureStatus: signed.signatureStatus,
+      fingerprint,
       validationErrors: [],
       extractedEvidenceJson: evidence,
+      repositoryReceipt: {
+        ingestedAt: new Date().toISOString(),
+        manifestLabel: signed.manifestLabel,
+        repository: "local-libsql",
+        signedFileHash: signedHash,
+      },
     });
 
     return {

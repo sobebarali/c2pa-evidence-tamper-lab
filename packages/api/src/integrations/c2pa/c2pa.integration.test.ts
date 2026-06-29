@@ -87,3 +87,37 @@ describe("c2pa integration (real signing)", () => {
     expect(classify(read).status).toBe("manifest_missing");
   });
 });
+
+// CET-253 — classify() prefers the v2 validation surface. A v2 asset reports
+// Invalid via validation_state even when the legacy validation_status is empty.
+describe("classify (v2 validation surface)", () => {
+  const base = {
+    claimGenerator: "x",
+    evidence: null,
+    hasC2paBytes: true,
+    hasIdentity: false,
+    hasManifest: true,
+    identitySignerName: null,
+    manifestLabel: "m",
+    parseFailed: false,
+    validationResults: null,
+    validationStatus: [],
+  };
+
+  it("marks a v2 Invalid state as tampered with empty legacy status", () => {
+    const result = classify({ ...base, validationState: "Invalid" });
+    expect(result.status).toBe("tampered");
+  });
+
+  it("treats a v2 Valid state as verified (untrusted in dev)", () => {
+    const result = classify({ ...base, validationState: "Valid" });
+    expect(result.status).toBe("verified");
+    expect(result.reasonCodes).toContain("C2PA_TRUST_UNVERIFIED");
+  });
+
+  it("drops the trust-unverified code when the state is Trusted", () => {
+    const result = classify({ ...base, validationState: "Trusted" });
+    expect(result.status).toBe("verified");
+    expect(result.reasonCodes).not.toContain("C2PA_TRUST_UNVERIFIED");
+  });
+});

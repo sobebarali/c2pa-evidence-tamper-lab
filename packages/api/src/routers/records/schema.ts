@@ -12,6 +12,15 @@ export const recordView = z.object({
   signatureStatus: z.enum(["valid", "invalid", "unknown"]),
   validationErrors: z.array(z.string()),
   extractedEvidenceJson: z.record(z.string(), z.unknown()),
+  // C2PA 2.4 repository-receipt (modeled in-store).
+  repositoryReceipt: z
+    .object({
+      ingestedAt: z.iso.datetime(),
+      manifestLabel: z.string().nullable(),
+      repository: z.string(),
+      signedFileHash: z.string(),
+    })
+    .nullable(),
   createdAt: z.iso.datetime(),
 });
 

@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import exifr from "exifr";
 import sharp from "sharp";
+import phash from "sharp-phash";
+import phashDistance from "sharp-phash/distance";
 
 const JPEG_SOS_MARKER_FIRST = 0xff;
 const JPEG_SOS_MARKER_SECOND = 0xda;
@@ -21,6 +23,19 @@ export type TamperMethod = "strip" | "pixel";
 
 export function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+// Perceptual fingerprint (DCT pHash via sharp-phash) — a 64-bit binary string.
+// Survives re-encoding/manifest stripping, so a tampered copy can be linked back
+// to its signed original even when the C2PA manifest is gone. This is a soft
+// binding — never a cryptographic guarantee.
+export function perceptualHash(bytes: Buffer): Promise<string> {
+  return phash(bytes);
+}
+
+// Hamming distance (count of differing bits) between two 64-bit fingerprints.
+export function hammingDistance(a: string, b: string): number {
+  return phashDistance(a, b);
 }
 
 // Reads dimensions/mime from the header (sharp) and EXIF timestamp + GPS

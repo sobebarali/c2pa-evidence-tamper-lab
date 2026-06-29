@@ -1,5 +1,6 @@
 import { createTestDb } from "@c2pa-evidence-tamper-lab/db/testing";
 import { call } from "@orpc/server";
+import sharp from "sharp";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
 import { storage } from "../../integrations/storage";
@@ -51,6 +52,12 @@ it("verifies a valid signed image and links it to the original record", async ()
   expect(res.matchedEvidenceId).toBe(evidenceId);
   expect(res.matchedOriginalRecord).toBe(true);
   expect(res.reasonCodes).toContain("MATCHED_PRIOR_EVIDENCE_RECORD");
+  // CET-255 — CAWG-shaped identity binding is present and bound to the org.
+  expect(res.identity.present).toBe(true);
+  expect(res.identity.signerName).toBe("Example Newsroom");
+  expect(res.reasonCodes).toContain("CAWG_IDENTITY_PRESENT");
+  // CET-253 — v2 validation surface is exposed.
+  expect(res.report?.validationState).toBe("Valid");
 });
 
 // task.md §11 #6 + #7 — pixel-tampered image is NOT verified, still links back
@@ -70,8 +77,9 @@ it("flags a pixel-tampered image as tampered and links it back", async () => {
   expect(res.originalSignedFileHash).not.toBe(res.uploadedFileHash);
 });
 
-// task.md §11 #8 — manifest-stripped image is manifest_missing, not verified, not linked
-it("reports a stripped image as manifest_missing with no link", async () => {
+// task.md §11 #8 — manifest-stripped image stays manifest_missing (crypto truth),
+// but CET-254 soft binding recovers the evidenceId via perceptual fingerprint.
+it("links a stripped image back to its record via soft binding", async () => {
   const stripped = await call(
     appRouter.tamper.create,
     { signedFileId, method: "strip" },
@@ -80,7 +88,34 @@ it("reports a stripped image as manifest_missing with no link", async () => {
   const res = await verifyFileId(stripped.tamperedFileId);
 
   expect(res.uploadedFileStatus).toBe("manifest_missing");
+  expect(res.reasonCodes).toContain("C2PA_MANIFEST_MISSING");
+  expect(res.reasonCodes).toContain("MATCHED_BY_SOFT_BINDING");
+  expect(res.matchedEvidenceId).toBe(evidenceId);
+  expect(res.matchedOriginalRecord).toBe(true);
+});
+
+// An unrelated unsigned image must NOT be falsely linked by the soft binding.
+it("reports an unrelated unsigned image as manifest_missing with no link", async () => {
+  // Textured (non-degenerate) image so its fingerprint is far from the signed one.
+  const pattern = Buffer.alloc(96 * 72 * 3);
+  for (let i = 0; i < pattern.length; i++) {
+    pattern[i] = (i * 73) % 256;
+  }
+  const unrelated = await sharp(pattern, {
+    raw: { width: 96, height: 72, channels: 3 },
+  })
+    .jpeg()
+    .toBuffer();
+
+  const res = await call(
+    appRouter.verify.check,
+    { file: toFile(unrelated, "unrelated.jpg") },
+    { context }
+  );
+
+  expect(res.uploadedFileStatus).toBe("manifest_missing");
   expect(res.matchedEvidenceId).toBeNull();
   expect(res.matchedOriginalRecord).toBe(false);
   expect(res.reasonCodes).toContain("C2PA_MANIFEST_MISSING");
+  expect(res.reasonCodes).not.toContain("MATCHED_BY_SOFT_BINDING");
 });

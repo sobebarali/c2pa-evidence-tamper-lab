@@ -35,6 +35,10 @@ export const evidenceRecords = sqliteTable("evidence_records", {
   signedFileHash: text("signed_file_hash").notNull(),
   manifestLabel: text("manifest_label"),
   claimGenerator: text("claim_generator"),
+  // Perceptual fingerprint (dHash) of the signed image — a soft binding used to
+  // recover this record when the C2PA manifest has been stripped. Nullable for
+  // rows written before fingerprinting existed.
+  fingerprint: text("fingerprint"),
   signatureStatus: text("signature_status", {
     enum: ["valid", "invalid", "unknown"],
   }).notNull(),
@@ -44,6 +48,15 @@ export const evidenceRecords = sqliteTable("evidence_records", {
   extractedEvidenceJson: text("extracted_evidence_json", { mode: "json" })
     .$type<Record<string, unknown>>()
     .notNull(),
+  // Models the C2PA 2.4 c2pa.repository-receipt assertion: proof this manifest
+  // was ingested into a repository (here, this DB). Modeled in-store — not yet
+  // emitted back into the manifest (SDK limitation). Nullable for older rows.
+  repositoryReceipt: text("repository_receipt", { mode: "json" }).$type<{
+    ingestedAt: string;
+    manifestLabel: string | null;
+    repository: string;
+    signedFileHash: string;
+  }>(),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
