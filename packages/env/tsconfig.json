@@ -1,0 +1,6 @@
+{
+  "extends": "@c2pa-evidence-tamper-lab/config/tsconfig.base.json",
+  "compilerOptions": {
+    "strictNullChecks": true
+  }
+}
