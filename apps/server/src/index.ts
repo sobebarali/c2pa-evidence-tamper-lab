@@ -86,6 +86,11 @@ app.use("/*", async (c, next) => {
 
 app.get("/", (c) => c.text("OK"));
 
+// Only these are served inline with their own type. Anything else (e.g. an
+// SVG/HTML uploaded to /verify) is forced to download as opaque bytes so the
+// stored content-type can never trigger inline script execution (stored XSS).
+const INLINE_IMAGE_MIME = new Set(["image/jpeg", "image/png"]);
+
 // Serve stored image bytes by file id (preview/download for the UI).
 app.get("/files/:id", async (c) => {
   const row = await storage.getFileRow(db, c.req.param("id"));
@@ -94,8 +99,14 @@ app.get("/files/:id", async (c) => {
   }
   try {
     const bytes = await storage.readBytes(row.id);
+    const inline = INLINE_IMAGE_MIME.has(row.mime);
     return c.newResponse(new Uint8Array(bytes), 200, {
-      "Content-Type": row.mime,
+      "Content-Type": inline ? row.mime : "application/octet-stream",
+      "Content-Disposition": inline
+        ? "inline"
+        : `attachment; filename="${row.id}"`,
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
       "Cache-Control": "private, max-age=31536000",
     });
   } catch {
