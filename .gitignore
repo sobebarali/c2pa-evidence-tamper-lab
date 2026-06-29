@@ -45,6 +45,12 @@ lerna-debug.log*
 # Testing
 coverage
 .nyc_output
+.vitest-data
+
+# Stored evidence images (DATA_DIR) + local sqlite
+.data
+local.db
+local.db-*
 
 # Misc
 *.tgz
