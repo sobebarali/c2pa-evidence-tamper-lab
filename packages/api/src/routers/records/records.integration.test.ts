@@ -2,7 +2,7 @@ import { createTestDb } from "@c2pa-evidence-tamper-lab/db/testing";
 import { call } from "@orpc/server";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
-import { testContext } from "../../test-support/context";
+import { brokenContext, testContext } from "../../test-support/context";
 import { makeJpeg, sampleClaims, toFile } from "../../test-support/fixtures";
 import { appRouter } from "../index";
 
@@ -58,4 +58,15 @@ it("returns NOT_FOUND for an unknown evidenceId", async () => {
   await expect(
     call(appRouter.records.get, { evidenceId: "ev_1999_999" }, { context })
   ).rejects.toMatchObject({ code: "NOT_FOUND" });
+});
+
+// A DB read failure maps to TOOL_ERROR, distinct from a clean NOT_FOUND.
+it("maps a read failure to TOOL_ERROR", async () => {
+  const broken = brokenContext();
+  await expect(
+    call(appRouter.records.list, undefined, { context: broken })
+  ).rejects.toMatchObject({ code: "TOOL_ERROR" });
+  await expect(
+    call(appRouter.records.get, { evidenceId }, { context: broken })
+  ).rejects.toMatchObject({ code: "TOOL_ERROR" });
 });

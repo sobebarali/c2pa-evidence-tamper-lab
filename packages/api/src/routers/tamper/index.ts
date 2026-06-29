@@ -21,27 +21,29 @@ const create = publicProcedure
       throw routerError("NOT_FOUND", { message: "signed file not found" });
     }
 
-    const bytes = await storage.readBytes(signed.id);
-    let tamperedBytes: Buffer;
+    // bytes read + tamper + DB/disk write are tool/infra work — a crash here
+    // (missing bytes, encode failure, schema drift) is a TOOL_ERROR, never a 500.
     try {
-      tamperedBytes = await tamper(bytes, input.method as TamperMethod);
+      const bytes = await storage.readBytes(signed.id);
+      const tamperedBytes = await tamper(bytes, input.method as TamperMethod);
+      const hash = sha256(tamperedBytes);
+      const meta = await extractMetadata(tamperedBytes).catch(() => null);
+      const row = await storage.storeFile(context.db, {
+        bytes: tamperedBytes,
+        kind: "tampered",
+        mime: signed.mime,
+        sha256: hash,
+        sizeBytes: tamperedBytes.length,
+        width: meta?.width ?? signed.width,
+        height: meta?.height ?? signed.height,
+      });
+      return { tamperedFileId: row.id, sha256: hash, method: input.method };
     } catch (cause) {
-      throw routerError("TOOL_ERROR", { message: "tamper failed", cause });
+      throw routerError("TOOL_ERROR", {
+        message: "tamper pipeline failed",
+        cause,
+      });
     }
-
-    const hash = sha256(tamperedBytes);
-    const meta = await extractMetadata(tamperedBytes).catch(() => null);
-    const row = await storage.storeFile(context.db, {
-      bytes: tamperedBytes,
-      kind: "tampered",
-      mime: signed.mime,
-      sha256: hash,
-      sizeBytes: tamperedBytes.length,
-      width: meta?.width ?? signed.width,
-      height: meta?.height ?? signed.height,
-    });
-
-    return { tamperedFileId: row.id, sha256: hash, method: input.method };
   });
 
 export const tamperRouter = { create };

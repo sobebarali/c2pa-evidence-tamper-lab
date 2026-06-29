@@ -2,7 +2,7 @@ import { createTestDb } from "@c2pa-evidence-tamper-lab/db/testing";
 import { call } from "@orpc/server";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
-import { testContext } from "../../test-support/context";
+import { brokenContext, testContext } from "../../test-support/context";
 import { makeJpeg, toFile } from "../../test-support/fixtures";
 import { appRouter } from "../index";
 
@@ -44,4 +44,12 @@ it("rejects a non-image with BAD_REQUEST", async () => {
   await expect(
     call(appRouter.upload.create, { file }, { context })
   ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+});
+
+// A valid image whose store write fails (DB down) maps to TOOL_ERROR, not 500.
+it("maps a store failure to TOOL_ERROR", async () => {
+  const file = toFile(await makeJpeg(), "ok.jpg");
+  await expect(
+    call(appRouter.upload.create, { file }, { context: brokenContext() })
+  ).rejects.toMatchObject({ code: "TOOL_ERROR" });
 });

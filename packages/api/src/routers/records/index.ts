@@ -27,23 +27,41 @@ function toView(row: EvidenceRecordRow): RecordView {
 }
 
 // Step 6 (records view) — list stored evidence records / fetch one by id.
-const list = publicProcedure.output(listOutput).handler(async ({ context }) => {
-  const rows = await context.db
-    .select()
-    .from(evidenceRecords)
-    .orderBy(desc(evidenceRecords.createdAt));
-  return { items: rows.map(toView) };
-});
+const list = publicProcedure
+  .errors({ TOOL_ERROR: {} })
+  .output(listOutput)
+  .handler(async ({ context }) => {
+    try {
+      const rows = await context.db
+        .select()
+        .from(evidenceRecords)
+        .orderBy(desc(evidenceRecords.createdAt));
+      return { items: rows.map(toView) };
+    } catch (cause) {
+      throw routerError("TOOL_ERROR", {
+        message: "failed to read records",
+        cause,
+      });
+    }
+  });
 
 const get = publicProcedure
-  .errors({ NOT_FOUND: {} })
+  .errors({ NOT_FOUND: {}, TOOL_ERROR: {} })
   .input(getInput)
   .output(recordView)
   .handler(async ({ input, context }) => {
-    const [row] = await context.db
-      .select()
-      .from(evidenceRecords)
-      .where(eq(evidenceRecords.evidenceId, input.evidenceId));
+    let row: EvidenceRecordRow | undefined;
+    try {
+      [row] = await context.db
+        .select()
+        .from(evidenceRecords)
+        .where(eq(evidenceRecords.evidenceId, input.evidenceId));
+    } catch (cause) {
+      throw routerError("TOOL_ERROR", {
+        message: "failed to read record",
+        cause,
+      });
+    }
     if (!row) {
       throw routerError("NOT_FOUND", { message: "evidence record not found" });
     }

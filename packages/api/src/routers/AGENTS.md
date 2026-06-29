@@ -5,7 +5,7 @@
 ## `upload.create` — step 1
 - **Input:** `{ file: File }` (jpeg/png).
 - **Output:** `{ fileId, media, capture }` — server-derived facts (sha256/mime/dims via sharp+crypto; capturedAt/gps via exifr, honest nulls).
-- **Errors:** `BAD_REQUEST` (not a readable image) · `UNSUPPORTED_MEDIA_TYPE` (not jpeg/png) · `PAYLOAD_TOO_LARGE`.
+- **Errors:** `BAD_REQUEST` (not a readable image) · `UNSUPPORTED_MEDIA_TYPE` (not jpeg/png) · `PAYLOAD_TOO_LARGE` · `TOOL_ERROR` (store failed).
 - **Side effects:** writes original bytes to disk + a `files` row. Detected mime is authoritative (never the client's content-type).
 
 ## `sign.create` — steps 2–4
@@ -30,7 +30,7 @@
 ## `records.list` / `records.get`
 - **Input:** list — none; get — `{ evidenceId }`.
 - **Output:** the §5 record view(s) (hashes, manifest label, signature status, validation errors, extracted evidence json, createdAt ISO) plus `repositoryReceipt` (modeled `c2pa.repository-receipt`, nullable).
-- **Errors:** get — `NOT_FOUND`.
+- **Errors:** list — `TOOL_ERROR` (read failed); get — `NOT_FOUND` · `TOOL_ERROR` (read failed).
 - **Side effects:** none.
 
 ## Conventions (Rule → Why)

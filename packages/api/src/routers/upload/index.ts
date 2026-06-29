@@ -12,6 +12,7 @@ const create = publicProcedure
   .errors({
     BAD_REQUEST: {},
     PAYLOAD_TOO_LARGE: {},
+    TOOL_ERROR: {},
     UNSUPPORTED_MEDIA_TYPE: {},
   })
   .input(uploadInput)
@@ -35,15 +36,25 @@ const create = publicProcedure
 
     const mimeType = meta.mime as "image/jpeg" | "image/png";
     const hash = sha256(bytes);
-    const row = await storage.storeFile(context.db, {
-      bytes,
-      kind: "original",
-      mime: mimeType,
-      sha256: hash,
-      sizeBytes: bytes.length,
-      width: meta.width,
-      height: meta.height,
-    });
+    // Validation (typed errors) is done; the DB/disk write is infra — map a
+    // crash here (schema drift, disk failure) to TOOL_ERROR, never a bare 500.
+    let row: Awaited<ReturnType<typeof storage.storeFile>>;
+    try {
+      row = await storage.storeFile(context.db, {
+        bytes,
+        kind: "original",
+        mime: mimeType,
+        sha256: hash,
+        sizeBytes: bytes.length,
+        width: meta.width,
+        height: meta.height,
+      });
+    } catch (cause) {
+      throw routerError("TOOL_ERROR", {
+        message: "failed to store file",
+        cause,
+      });
+    }
 
     return {
       fileId: row.id,
