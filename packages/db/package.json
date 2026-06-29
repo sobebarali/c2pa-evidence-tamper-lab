@@ -7,6 +7,12 @@
     },
     "./*": {
       "default": "./src/*.ts"
+    },
+    "./schema": {
+      "default": "./src/schema/index.ts"
+    },
+    "./testing": {
+      "default": "./src/testing.ts"
     }
   },
   "scripts": {
@@ -14,7 +20,9 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "test": "vitest run",
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@c2pa-evidence-tamper-lab/env": "workspace:*",
@@ -27,6 +35,7 @@
   "devDependencies": {
     "@c2pa-evidence-tamper-lab/config": "workspace:*",
     "drizzle-kit": "^0.31.8",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   }
 }

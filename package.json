@@ -31,6 +31,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "test": "turbo run test",
     "dev:web": "turbo run dev -F web",
     "dev:server": "turbo run dev -F server",
     "db:push": "turbo run db:push -F @c2pa-evidence-tamper-lab/db",
@@ -43,7 +44,8 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "check": "ultracite check",
-    "fix": "ultracite fix"
+    "fix": "ultracite fix",
+    "examples": "bun run --filter @c2pa-evidence-tamper-lab/api examples"
   },
   "dependencies": {
     "@c2pa-evidence-tamper-lab/env": "workspace:*",

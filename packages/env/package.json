@@ -16,5 +16,8 @@
     "@c2pa-evidence-tamper-lab/config": "workspace:*",
     "@types/node": "catalog:",
     "typescript": "catalog:"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
   }
 }

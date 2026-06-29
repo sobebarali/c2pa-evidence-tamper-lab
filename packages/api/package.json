@@ -9,20 +9,30 @@
       "default": "./src/*.ts"
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run",
+    "check-types": "tsc --noEmit",
+    "examples": "SKIP_ENV_VALIDATION=true bun scripts/generate-examples.ts"
+  },
   "dependencies": {
     "@c2pa-evidence-tamper-lab/db": "workspace:*",
     "@c2pa-evidence-tamper-lab/env": "workspace:*",
+    "@contentauth/c2pa-node": "0.6.0",
+    "@contentauth/c2pa-types": "0.7.0",
     "@orpc/client": "catalog:",
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@orpc/zod": "catalog:",
     "dotenv": "catalog:",
+    "drizzle-orm": "^0.45.1",
+    "exifr": "7.1.3",
+    "sharp": "0.35.2",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@c2pa-evidence-tamper-lab/config": "workspace:*",
     "hono": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   }
 }

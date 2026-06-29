@@ -1,5 +1,15 @@
 {
   "name": "@c2pa-evidence-tamper-lab/config",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./vitest.base": {
+      "default": "./vitest.base.ts"
+    },
+    "./tsconfig.base.json": "./tsconfig.base.json"
+  },
+  "dependencies": {
+    "vitest": "^4.1.9"
+  }
 }
