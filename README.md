@@ -1,120 +1,68 @@
-# c2pa-evidence-tamper-lab
+# C2PA Evidence Tamper Lab
 
-A modern TypeScript stack that combines React, TanStack Router, Hono, ORPC, and more.
+A local-first **content-provenance** workflow: upload an image → fill an evidence
+JSON record → sign it into a **C2PA** manifest → extract and store the record →
+generate a tampered copy → re-upload and **verify** (detect `verified` /
+`tampered` / `manifest_missing` / `manifest_invalid`), linking back to the
+original `evidenceId`. See `task.md` for the full spec and `DECISIONS.md` for what
+is real vs mocked.
 
-## Features
+## Stack
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Router** - File-based routing with full type safety
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Hono** - Lightweight, performant server framework
-- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
-- **Node.js** - Runtime environment
-- **Drizzle** - TypeScript-first ORM
-- **SQLite/Turso** - Database engine
-- **Turborepo** - Optimized monorepo build system
+Bun + Turborepo monorepo (`@c2pa-evidence-tamper-lab/*`):
 
-## Getting Started
+- **`apps/web`** — React 19 + TanStack Router (Vite, Tailwind v4) — http://localhost:3001
+- **`apps/server`** — Hono + oRPC (`/rpc`, OpenAPI at `/api-reference`, images at `/files/:id`) — http://localhost:3000
+- **`packages/api`** — oRPC routers + integrations (`c2pa`, `imaging`, `storage`) + shared evidence schema
+- **`packages/db`** — Drizzle over libSQL/SQLite (`files`, `evidence_records`)
+- **`packages/ui` / `packages/env` / `packages/config`**
 
-First, install the dependencies:
+**C2PA:** in-process [`@contentauth/c2pa-node`](https://github.com/contentauth/c2pa-js)
+with dev demo certificates (`fixtures/dev-certs/`). Image facts via `sharp` +
+`exifr`; SHA-256 via Node `crypto`.
 
-```bash
-bun install
-```
-
-## Database Setup
-
-This project uses SQLite with Drizzle ORM.
-
-1. Start the local SQLite database (optional):
+## Setup
 
 ```bash
-bun run db:local
+bun install          # installs deps (incl. the C2PA native binary — no Rust needed)
+bun run db:push      # create files + evidence_records in local.db  ← required once
+bun run dev          # web on :3001, server on :3000
 ```
 
-2. Update your `.env` file in the `apps/server` directory with the appropriate connection details if needed.
+`apps/server/.env` (already present) sets `DATABASE_URL`, `CORS_ORIGIN`, and
+optionally `DATA_DIR` (where signed/tampered images are stored). Signing uses the
+committed **dev-only** demo certs unless `C2PA_SIGN_CERT_PATH` / `C2PA_PRIVATE_KEY_PATH`
+override them. The demo key is never stored in the DB, returned by the API, or exported.
 
-3. Apply the schema to your database:
+## Use
 
-```bash
-bun run db:push
-```
+Open http://localhost:3001:
 
-Then, run the development server:
+1. **Create** — upload a JPEG/PNG (see file facts), fill journalism or inspection
+   evidence, and sign it.
+2. **Records** — browse stored evidence records.
+3. **Tamper** — pick a signed image, choose `pixel` (keeps the manifest → detected
+   as `tampered`) or `strip` (drops it → `manifest_missing`), and download the result.
+4. **Verify** — re-upload the tampered/signed image to see the status, reason
+   codes, and the linked original record.
 
-```bash
-bun run dev
-```
+## Scripts
 
-Open [http://localhost:5173](http://localhost:5173) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
+- `bun run dev` — all apps in dev
+- `bun run check-types` — typecheck every package
+- `bun run test` — Vitest (real in-memory libSQL + real C2PA signing; covers `task.md` §11)
+- `bun x ultracite fix` — lint/format (Biome)
+- `bun run examples` — regenerate `examples/` (original, evidence.json, manifest.json, signed.jpg, tampered.jpg, db-export.json)
+- `bun run db:studio` / `db:generate` / `db:migrate` / `db:local`
 
-## UI Customization
+## Tests
 
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
-
-```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
-```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@c2pa-evidence-tamper-lab/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
+`bun run test` runs the colocated `*.integration.test.ts` through the oRPC surface
+against a real in-memory libSQL database and real C2PA signing — covering schema
+validation, manifest creation, record persistence, evidenceId recovery, the
+verified/tampered/missing matrix, malicious-text inertness, and key non-leakage.
 
 ## Deployment
 
-### Docker Compose
-
-- Target: web + server
-- Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: bun run docker:build
-- Start: bun run docker:up
-- Logs: bun run docker:logs
-- Stop: bun run docker:down
-
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
-
-## Project Structure
-
-```
-c2pa-evidence-tamper-lab/
-├── apps/
-│   ├── web/         # Frontend application (React + TanStack Router)
-│   └── server/      # Backend API (Hono, ORPC)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── api/         # API layer / business logic
-│   └── db/          # Database schema & queries
-```
-
-## Available Scripts
-
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run dev:server`: Start only the server
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run db:push`: Push schema changes to database
-- `bun run db:generate`: Generate database client/types
-- `bun run db:migrate`: Run database migrations
-- `bun run db:studio`: Open database studio UI
-- `bun run db:local`: Start the local SQLite database
-- `bun run docker:build`: Build the Docker Compose images
-- `bun run docker:up`: Build and start the Docker Compose stack
-- `bun run docker:logs`: Tail logs from the Docker Compose stack
-- `bun run docker:down`: Stop the Docker Compose stack
+Docker Compose (`docker-compose.yml`): `bun run docker:up` (web + server). Set the
+C2PA cert/key env overrides for any non-dev deployment.
