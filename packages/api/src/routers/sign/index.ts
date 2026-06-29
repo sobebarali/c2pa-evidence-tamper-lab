@@ -30,74 +30,78 @@ const create = publicProcedure
       height: original.height ?? 0,
     };
 
-    const existing = await context.db.select().from(evidenceRecords);
-    const now = new Date();
-    const evidenceId = formatEvidenceId(now.getFullYear(), existing.length + 1);
-    const evidence = evidenceSchema.parse(
-      buildEvidence({
-        evidenceId,
-        media,
-        claims: input.claims,
-        createdAt: now.toISOString(),
-      })
-    );
-
-    const bytes = await storage.readBytes(original.id);
-    let signed: Awaited<ReturnType<typeof signImage>>;
+    // DB reads/writes + manifest extraction are tool/infra work — a crash here
+    // (e.g. schema drift, encode failure) is a TOOL_ERROR, never a bare 500.
     try {
-      signed = await signImage({
+      const existing = await context.db.select().from(evidenceRecords);
+      const now = new Date();
+      const evidenceId = formatEvidenceId(
+        now.getFullYear(),
+        existing.length + 1
+      );
+      const evidence = evidenceSchema.parse(
+        buildEvidence({
+          evidenceId,
+          media,
+          claims: input.claims,
+          createdAt: now.toISOString(),
+        })
+      );
+
+      const bytes = await storage.readBytes(original.id);
+      const signed = await signImage({
         bytes,
         mime: media.mimeType,
         title: evidenceId,
         evidence,
       });
+
+      const signedHash = sha256(signed.signedBytes);
+      const fingerprint = await perceptualHash(signed.signedBytes);
+      const signedRow = await storage.storeFile(context.db, {
+        bytes: signed.signedBytes,
+        kind: "signed",
+        mime: media.mimeType,
+        sha256: signedHash,
+        sizeBytes: signed.signedBytes.length,
+        width: original.width,
+        height: original.height,
+      });
+
+      await context.db.insert(evidenceRecords).values({
+        evidenceId,
+        mode: evidence.mode,
+        originalFileId: original.id,
+        originalFileHash: original.sha256,
+        signedFileId: signedRow.id,
+        signedFileHash: signedHash,
+        manifestLabel: signed.manifestLabel,
+        claimGenerator: signed.claimGenerator,
+        signatureStatus: signed.signatureStatus,
+        fingerprint,
+        validationErrors: [],
+        extractedEvidenceJson: evidence,
+        repositoryReceipt: {
+          ingestedAt: new Date().toISOString(),
+          manifestLabel: signed.manifestLabel,
+          repository: "local-libsql",
+          signedFileHash: signedHash,
+        },
+      });
+
+      return {
+        evidenceId,
+        signedFileId: signedRow.id,
+        signedFileHash: signedHash,
+        manifestLabel: signed.manifestLabel,
+        signatureStatus: signed.signatureStatus,
+      };
     } catch (cause) {
       throw routerError("TOOL_ERROR", {
-        message: "c2pa signing failed",
+        message: "sign pipeline failed",
         cause,
       });
     }
-
-    const signedHash = sha256(signed.signedBytes);
-    const fingerprint = await perceptualHash(signed.signedBytes);
-    const signedRow = await storage.storeFile(context.db, {
-      bytes: signed.signedBytes,
-      kind: "signed",
-      mime: media.mimeType,
-      sha256: signedHash,
-      sizeBytes: signed.signedBytes.length,
-      width: original.width,
-      height: original.height,
-    });
-
-    await context.db.insert(evidenceRecords).values({
-      evidenceId,
-      mode: evidence.mode,
-      originalFileId: original.id,
-      originalFileHash: original.sha256,
-      signedFileId: signedRow.id,
-      signedFileHash: signedHash,
-      manifestLabel: signed.manifestLabel,
-      claimGenerator: signed.claimGenerator,
-      signatureStatus: signed.signatureStatus,
-      fingerprint,
-      validationErrors: [],
-      extractedEvidenceJson: evidence,
-      repositoryReceipt: {
-        ingestedAt: new Date().toISOString(),
-        manifestLabel: signed.manifestLabel,
-        repository: "local-libsql",
-        signedFileHash: signedHash,
-      },
-    });
-
-    return {
-      evidenceId,
-      signedFileId: signedRow.id,
-      signedFileHash: signedHash,
-      manifestLabel: signed.manifestLabel,
-      signatureStatus: signed.signatureStatus,
-    };
   });
 
 export const signRouter = { create };

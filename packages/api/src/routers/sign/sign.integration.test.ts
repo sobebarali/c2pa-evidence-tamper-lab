@@ -1,8 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 import { evidenceRecords } from "@c2pa-evidence-tamper-lab/db/schema";
 import { createTestDb } from "@c2pa-evidence-tamper-lab/db/testing";
+import { env } from "@c2pa-evidence-tamper-lab/env/server";
 import { call } from "@orpc/server";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
@@ -62,6 +63,26 @@ it("preserves malicious caption text verbatim as JSON data", async () => {
     journalism: { caption: string };
   };
   expect(evidence.journalism.caption).toBe("<script>alert(1)</script>");
+});
+
+// a crash inside the sign pipeline (here: missing original bytes on disk)
+// surfaces as a typed TOOL_ERROR, never an opaque INTERNAL_SERVER_ERROR.
+it("maps a sign-pipeline failure to TOOL_ERROR", async () => {
+  const bytes = await makeJpeg();
+  const up = await call(
+    appRouter.upload.create,
+    { file: toFile(bytes, "gone.jpg") },
+    { context }
+  );
+  await rm(join(env.DATA_DIR, up.fileId));
+
+  await expect(
+    call(
+      appRouter.sign.create,
+      { originalFileId: up.fileId, claims: sampleClaims },
+      { context }
+    )
+  ).rejects.toMatchObject({ code: "TOOL_ERROR" });
 });
 
 // task.md §11 #10 — the private signing key never reaches the DB or the API
