@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      # Dummy values so @t3-oss/env validation passes at boot; tests use an
+      # in-memory libSQL DB and the committed demo certs in fixtures/dev-certs.
+      DATABASE_URL: "file:./local.db"
+      CORS_ORIGIN: "http://localhost:3001"
+      VITE_SERVER_URL: "http://localhost:3000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.5"
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: ${{ runner.os }}-turbo-${{ github.sha }}
+          restore-keys: ${{ runner.os }}-turbo-
+
+      - run: bun install --frozen-lockfile
+
+      - run: bun run check
+      - run: bun run check-types
+      - run: bun run test
+      - run: bun run build
