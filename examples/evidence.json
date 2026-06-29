@@ -1,0 +1,38 @@
+{
+  "evidenceId": "ev_2026_001",
+  "mode": "journalism",
+  "media": {
+    "sha256": "25744b2af4faa297b17759b45de64aad75b733c2159af6ca709cf82d0466826e",
+    "mimeType": "image/jpeg",
+    "fileSizeBytes": 5668,
+    "width": 1280,
+    "height": 720
+  },
+  "capture": {
+    "capturedAt": "2026-06-27T10:30:00Z",
+    "gps": {
+      "lat": 25.2048,
+      "lng": 55.2708,
+      "source": "user",
+      "confidence": "medium"
+    },
+    "cameraHeadingDegrees": 90,
+    "cameraDirectionText": "east"
+  },
+  "journalism": {
+    "reporterId": "rep_123",
+    "organization": "Example Newsroom",
+    "sourceType": "staff_reporter",
+    "caption": "Street scene after the event",
+    "publicInterestReason": "Newsworthy event documentation",
+    "safetyNotes": [
+      "Do not reveal exact GPS publicly"
+    ]
+  },
+  "inspection": null,
+  "integrity": {
+    "schemaVersion": "1.0",
+    "createdBy": "Original Pictures Evidence Agent",
+    "createdAt": "2026-06-27T10:35:00Z"
+  }
+}
